@@ -2,7 +2,7 @@
 
 set -e
 
-BASE_VM_DIR="/mnt/VMs"
+BASE_VM_DIR="/mnt/storage02/VM"
 ISO_DIR="/mnt/ISO"
 FW_DIR="/usr/share/OVMF"
 
@@ -19,6 +19,7 @@ set_defaults() {
     CPU="2"
     DISK=""
     ISO=""
+    ADDITIONAL_ISO=""
 
     NET="user"                 # user | bridge | tap | none
     BRIDGE="br0"               # for NET=bridge
@@ -83,6 +84,8 @@ parse_common_opt() {
         --cpu)      CPU="$2";                   SHIFT_N=2 ;;
         --iso)      ISO="$2";                   SHIFT_N=2 ;;
         --no-iso)   ISO="";                     SHIFT_N=1 ;;
+        --additional-iso)    ADDITIONAL_ISO="$2"; SHIFT_N=2 ;;
+        --no-additional-iso) ADDITIONAL_ISO="";   SHIFT_N=1 ;;
         --net)      NET="$2";                   SHIFT_N=2 ;;
         --bridge)   BRIDGE="$2";                SHIFT_N=2 ;;
         --tap)      TAP="$2";                   SHIFT_N=2 ;;
@@ -128,12 +131,26 @@ write_conf() {
         echo "CPU=$(printf %q "$CPU")"
         echo "DISK=$(printf %q "$DISK")"
         echo "ISO=$(printf %q "$ISO")"
-        echo "NET=$(printf %q "$NET")"
-        echo "BRIDGE=$(printf %q "$BRIDGE")"
-        echo "TAP=$(printf %q "$TAP")"
+        echo "ADDITIONAL_ISO=$(printf %q "$ADDITIONAL_ISO")"
+        echo "# NET selects the active backend; only its matching setting is used."
+        echo "NET=$(printf %q "$NET")  # active backend"
+        if [[ "$NET" == "bridge" ]]; then
+            echo "BRIDGE=$(printf %q "$BRIDGE")  # active"
+        else
+            echo "BRIDGE=$(printf %q "$BRIDGE")  # inactive unless NET=bridge"
+        fi
+        if [[ "$NET" == "tap" ]]; then
+            echo "TAP=$(printf %q "$TAP")  # active"
+        else
+            echo "TAP=$(printf %q "$TAP")  # inactive unless NET=tap"
+        fi
         echo "NIC=$(printf %q "$NIC")"
         echo "MAC=$(printf %q "$MAC")"
-        echo "HOSTFWD=$(printf %q "$HOSTFWD")"
+        if [[ "$NET" == "user" ]]; then
+            echo "HOSTFWD=$(printf %q "$HOSTFWD")  # active"
+        else
+            echo "HOSTFWD=$(printf %q "$HOSTFWD")  # inactive unless NET=user"
+        fi
         echo "GPU=$(printf %q "$GPU")"
         echo "DISPLAY_TYPE=$(printf %q "$DISPLAY_TYPE")"
         echo "VNC_DISPLAY=$(printf %q "$VNC_DISPLAY")"
@@ -404,6 +421,16 @@ boot_vm() {
         ARGS+=(-cdrom "$ISO_DIR/$ISO")
     fi
 
+    # Optional second CD-ROM image; use the configured path as-is.
+    if [[ -n "$ADDITIONAL_ISO" ]]; then
+        [[ -f "$ADDITIONAL_ISO" ]] || {
+            echo "[-] Additional ISO not found:"
+            echo "    $ADDITIONAL_ISO"
+            exit 1
+        }
+        ARGS+=(-drive "file=$ADDITIONAL_ISO,media=cdrom,index=1")
+    fi
+
     # Network
     local NIC_DEV="$NIC,netdev=n1"
     [[ -n "$MAC" ]] && NIC_DEV+=",mac=$MAC"
@@ -582,6 +609,7 @@ Options (create / set / boot):
 
   --ram 8              --cpu 6
   --iso file.iso       --no-iso
+  --additional-iso /path/to/tools.iso  --no-additional-iso
   --net user|bridge|tap|none
   --bridge br0         (with --net bridge)
   --tap tap0           (with --net tap)

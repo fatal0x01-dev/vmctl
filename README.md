@@ -49,7 +49,11 @@ RAM=8G
 CPU=4
 DISK=target-vm.qcow2
 ISO=windows11.iso
+ADDITIONAL_ISO=/mnt/storage01/ISO/virtio-win-0.1.285.iso
 ```
+
+`ADDITIONAL_ISO` is optional. When set, the image is attached as a second
+CD-ROM drive using its configured path.
 
 ## Requirements
 
